@@ -4,12 +4,8 @@ import com.google.common.base.Preconditions;
 import io.dropwizard.auth.AuthFilter;
 import io.dropwizard.auth.AuthenticationException;
 import io.dropwizard.auth.Authenticator;
-import org.eclipse.jetty.server.HttpChannel;
 import org.eclipse.jetty.server.Request;
-import org.keycloak.adapters.AdapterDeploymentContext;
-import org.keycloak.adapters.AdapterTokenStore;
-import org.keycloak.adapters.KeycloakDeployment;
-import org.keycloak.adapters.KeycloakDeploymentBuilder;
+import org.keycloak.adapters.*;
 import org.keycloak.adapters.jetty.JettyAdapterSessionStore;
 import org.keycloak.adapters.jetty.core.JettyCookieTokenStore;
 import org.keycloak.adapters.jetty.core.JettyRequestAuthenticator;
@@ -18,7 +14,6 @@ import org.keycloak.adapters.spi.AuthChallenge;
 import org.keycloak.adapters.spi.AuthOutcome;
 import org.keycloak.adapters.spi.HttpFacade;
 import org.keycloak.enums.TokenStore;
-import org.keycloak.representations.adapters.config.AdapterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +28,8 @@ import java.io.IOException;
 import java.security.Principal;
 import java.util.Optional;
 
+import static com.google.common.base.Preconditions.checkState;
+
 @Priority(Priorities.AUTHENTICATION)
 public class KeycloakAuthFilter<P extends Principal> extends AuthFilter<HttpServletRequest, P> {
     private static final Logger LOGGER = LoggerFactory.getLogger(KeycloakAuthFilter.class);
@@ -41,15 +38,26 @@ public class KeycloakAuthFilter<P extends Principal> extends AuthFilter<HttpServ
 
     protected AdapterDeploymentContext deploymentContext;
 
-    private AdapterConfig adapterConfig;
+    private KeycloakConfiguration adapterConfig;
+    private KeycloakConfigResolver configResolver;
 
     public void initializeKeycloak() {
-        KeycloakDeployment kd = KeycloakDeploymentBuilder.build(adapterConfig);
-        deploymentContext = new AdapterDeploymentContext(kd);
+        if(adapterConfig != null) {
+            KeycloakDeployment kd = KeycloakDeploymentBuilder.build(adapterConfig);
+            deploymentContext = new AdapterDeploymentContext(kd);
+        }else{
+            deploymentContext = new AdapterDeploymentContext(configResolver);
+        }
+
     }
 
-    private KeycloakAuthFilter(AdapterConfig adapterConfig) {
+    private KeycloakAuthFilter(KeycloakConfiguration adapterConfig) {
         this.adapterConfig = adapterConfig;
+    }
+
+
+    private KeycloakAuthFilter(KeycloakConfigResolver configResolver) {
+        this.configResolver = configResolver;
     }
 
     @Override
@@ -159,21 +167,31 @@ public class KeycloakAuthFilter<P extends Principal> extends AuthFilter<HttpServ
     public static class Builder<P extends Principal>
             extends AuthFilterBuilder<HttpServletRequest, P, KeycloakAuthFilter<P>> {
 
-        private AdapterConfig adapterConfig;
+        private KeycloakConfiguration adapterConfig;
+        private KeycloakConfigResolver configResolver;
 
         @Override
         protected KeycloakAuthFilter<P> newInstance() {
-            return new KeycloakAuthFilter<>(adapterConfig);
+            if(adapterConfig != null)
+                return new KeycloakAuthFilter<>(adapterConfig);
+            return new KeycloakAuthFilter<>(configResolver);
         }
 
-        public Builder<P> setConfig(AdapterConfig adapterConfig) {
+        public Builder<P> setConfig(KeycloakConfiguration adapterConfig) {
+            checkState(configResolver == null, "Can not specify config file and config resolver");
             this.adapterConfig = adapterConfig;
+            return this;
+        }
+
+        public Builder<P> setConfigResolver(KeycloakConfigResolver resolver){
+            checkState(adapterConfig == null, "Can not specify config file and config resolver");
+            this.configResolver = resolver;
             return this;
         }
 
         @Override
         public KeycloakAuthFilter<P> buildAuthFilter() {
-            Preconditions.checkArgument(adapterConfig != null, "Keycloak config is not set");
+            Preconditions.checkArgument(adapterConfig != null || configResolver != null, "Keycloak config or config resolver must be set");
             KeycloakAuthFilter<P> filter = super.buildAuthFilter();
             filter.initializeKeycloak();
             return filter;

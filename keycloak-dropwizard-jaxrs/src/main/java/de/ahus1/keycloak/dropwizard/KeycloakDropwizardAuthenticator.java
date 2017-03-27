@@ -3,13 +3,9 @@ package de.ahus1.keycloak.dropwizard;
 import org.eclipse.jetty.security.ServerAuthException;
 import org.eclipse.jetty.security.authentication.DeferredAuthentication;
 import org.eclipse.jetty.server.Authentication;
-import org.eclipse.jetty.server.Request;
 import org.keycloak.KeycloakSecurityContext;
-import org.keycloak.adapters.AdapterTokenStore;
-import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.adapters.jetty.JettyAdapterSessionStore;
 import org.keycloak.adapters.jetty.KeycloakJettyAuthenticator;
-import org.keycloak.adapters.jetty.core.JettySessionTokenStore;
 
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;

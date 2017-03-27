@@ -11,6 +11,7 @@ import io.dropwizard.setup.Environment;
 import org.eclipse.jetty.security.ConstraintSecurityHandler;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
+import org.keycloak.adapters.KeycloakConfigResolver;
 import org.keycloak.adapters.jetty.KeycloakJettyAuthenticator;
 import org.keycloak.enums.TokenStore;
 
@@ -18,8 +19,10 @@ import javax.ws.rs.container.ContainerRequestFilter;
 import java.security.Principal;
 import java.util.Locale;
 
-public abstract class KeycloakBundle<T> implements ConfiguredBundle<T> {
+import static com.google.common.base.Preconditions.checkState;
 
+public abstract class KeycloakBundle<T> implements ConfiguredBundle<T> {
+    public static final String DYNAMIC_REALM = "no_realm";
     // tag::keycloak[]
 
     @Override
@@ -28,15 +31,28 @@ public abstract class KeycloakBundle<T> implements ConfiguredBundle<T> {
         /* setup the authenticator in front of the requests to allow for pre-auth integration */
         // tag::authenticator[]
         KeycloakJettyAuthenticator keycloak = new KeycloakDropwizardAuthenticator();
+
+        KeycloakConfiguration keycloakConfiguration = getKeycloakConfiguration(configuration);
+        KeycloakConfigResolver configResolver = getConfigResolver(configuration);
         keycloak.setAdapterConfig(getKeycloakConfiguration(configuration));
+
+        if(keycloakConfiguration.isUseConfigResolver()) {
+            checkState(configResolver != null, "Override getConfigResolver() needed to provide a resolver implementation.");
+            keycloak.setConfigResolver(configResolver);
+        }
+
         ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
         environment.getApplicationContext().setSecurityHandler(securityHandler);
         environment.getApplicationContext().getSecurityHandler().setAuthenticator(keycloak);
         // end::authenticator[]
 
         // tag::authfactory[]
-        environment.jersey().register(new AuthDynamicFeature(
-                createAuthFactory(configuration)));
+        if(!keycloakConfiguration.isUseConfigResolver()) {
+            environment.jersey().register(new AuthDynamicFeature(createAuthFactory(configuration)));
+        }
+        else{
+            environment.jersey().register(new AuthDynamicFeature(createAuthFactory(configResolver,configuration)));
+        }
         // To use @RolesAllowed annotations
         environment.jersey().register(RolesAllowedDynamicFeature.class);
         // To use @Auth to inject a custom Principal type into your resource
@@ -69,6 +85,15 @@ public abstract class KeycloakBundle<T> implements ConfiguredBundle<T> {
                 .setAuthenticator(createAuthenticator(getKeycloakConfiguration(configuration)))
                 .setAuthorizer(createAuthorizer())
                 .setRealm(getRealm(configuration))
+                .buildAuthFilter();
+    }
+
+    protected ContainerRequestFilter createAuthFactory(KeycloakConfigResolver configurationResolver, T configuration) {
+        return new KeycloakAuthFilter.Builder<Principal>()
+                .setConfigResolver(configurationResolver)
+                .setAuthenticator(createAuthenticator(getKeycloakConfiguration(configuration)))
+                .setAuthorizer(createAuthorizer())
+                .setRealm(DYNAMIC_REALM)
                 .buildAuthFilter();
     }
 
@@ -115,6 +140,10 @@ public abstract class KeycloakBundle<T> implements ConfiguredBundle<T> {
     }
 
     protected abstract KeycloakConfiguration getKeycloakConfiguration(T configuration);
+
+    public KeycloakConfigResolver getConfigResolver(T configuration){
+        return null;
+    }
 
     @Override
     public void initialize(Bootstrap<?> bootstrap) {

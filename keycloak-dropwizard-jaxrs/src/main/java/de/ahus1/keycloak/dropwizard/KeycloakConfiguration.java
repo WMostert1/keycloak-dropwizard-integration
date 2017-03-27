@@ -1,5 +1,6 @@
 package de.ahus1.keycloak.dropwizard;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.keycloak.representations.adapters.config.AdapterConfig;
 
 /**
@@ -8,4 +9,14 @@ import org.keycloak.representations.adapters.config.AdapterConfig;
  * In future this class may have helper methods.
  */
 public class KeycloakConfiguration extends AdapterConfig {
+    @JsonProperty("use-config-resolver")
+    protected boolean useConfigResolver;
+
+    public boolean isUseConfigResolver() {
+        return useConfigResolver;
+    }
+
+    public void setUseConfigResolver(boolean useConfigResolver) {
+        this.useConfigResolver = useConfigResolver;
+    }
 }
